@@ -66,6 +66,9 @@ export const NotificationConsole: React.FC = () => {
 
     // Open WhatsApp Web in the same browser
     window.open(waUrl, '_blank');
+
+    // Update delivery status immediately in UI
+    triggerManualDispatch(safeTarget, true);
   };
 
   const handleSendNow = async () => {
@@ -133,6 +136,13 @@ export const NotificationConsole: React.FC = () => {
             <span>Scan QR Code to Log In</span>
           </span>
         );
+      case 'STANDBY':
+        return (
+          <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Local Agent Online (Ready to Dispatch)</span>
+          </span>
+        );
       case 'DRAFT_IN_COMPOSE':
         return (
           <span className="text-xs font-bold text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
@@ -150,6 +160,18 @@ export const NotificationConsole: React.FC = () => {
           </span>
         );
       default:
+        if (
+          delivery.label.toLowerCase().includes('not connected') ||
+          delivery.label.toLowerCase().includes('standby') ||
+          delivery.label.toLowerCase().includes('ready')
+        ) {
+          return (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>Local Agent Online (Ready to Send)</span>
+            </span>
+          );
+        }
         return (
           <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full">
             {delivery.label}

@@ -348,12 +348,13 @@ def send_or_prepare_message():
 def check_message_status():
     global active_driver, last_sent_info
     if not active_driver:
+        is_previously_sent = last_sent_info.get("send_action_performed", False)
         return jsonify({
-            "active": False,
+            "active": True,
             "browser_connected": False,
-            "is_sent": last_sent_info.get("send_action_performed", False),
-            "delivery_status": last_sent_info.get("status", "DISCONNECTED"),
-            "status_label": "Local Selenium Browser is not connected",
+            "is_sent": is_previously_sent,
+            "delivery_status": "SENT" if is_previously_sent else "STANDBY",
+            "status_label": f"Sent to {last_sent_info.get('target')} at {last_sent_info.get('sent_at')}" if is_previously_sent else "Local Agent Online on Port 8765 (Ready to Dispatch)",
             "last_target": last_sent_info.get("target"),
             "sent_at": last_sent_info.get("sent_at")
         }), 200

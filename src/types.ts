@@ -80,7 +80,7 @@ export type NotificationStage =
 
 export interface DeliveryInfo {
   isSent: boolean;
-  status: 'DELIVERED' | 'SENT' | 'SENT_SINGLE_TICK' | 'PENDING_CLOCK' | 'WAITING_FOR_QR' | 'DRAFT_IN_COMPOSE' | 'NO_OUTGOING_MESSAGE' | 'DISCONNECTED' | 'CHECK_ERROR' | 'MOCK_SENT';
+  status: 'DELIVERED' | 'SENT' | 'SENT_SINGLE_TICK' | 'PENDING_CLOCK' | 'WAITING_FOR_QR' | 'DRAFT_IN_COMPOSE' | 'NO_OUTGOING_MESSAGE' | 'DISCONNECTED' | 'CHECK_ERROR' | 'MOCK_SENT' | 'STANDBY';
   label: string;
   checkedAt?: string;
   lastTarget?: string;
