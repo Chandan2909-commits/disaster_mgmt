@@ -138,8 +138,12 @@ export const NotificationConsole: React.FC = () => {
         );
       case 'DISCONNECTED':
         return (
-          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-            Local Agent Offline
+          <span
+            className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full"
+            title="The Python Selenium companion (companion/agent.py) is not currently running in your terminal."
+          >
+            <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+            <span>Python Helper Offline (Use Green Button)</span>
           </span>
         );
       default:
@@ -314,6 +318,11 @@ export const NotificationConsole: React.FC = () => {
           )}
           <span>{isSending ? 'Sending...' : 'Send via Selenium Agent'}</span>
         </button>
+      </div>
+
+      <div className="mt-2 pt-1 text-[10px] text-gray-400 font-medium flex items-center justify-between">
+        <span>💡 <strong>Tip:</strong> The <strong>green button</strong> sends directly from your browser!</span>
+        <span>To use Selenium, run <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700">companion/run_agent.bat</code></span>
       </div>
     </div>
   );
