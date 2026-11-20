@@ -53,12 +53,15 @@ export const NotificationConsole: React.FC = () => {
     )} m/h. Target: ${rawTarget}.`;
 
     let waUrl = '';
+    const safeTarget = rawTarget || 'disaster_mgmt_research_paper';
     if (isPhone && cleanPhone.length >= 7) {
       waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(
         testMsg
-      )}&disaster_auto_send=1`;
+      )}&disaster_auto_send=1&disaster_target=${encodeURIComponent(safeTarget)}`;
     } else {
-      waUrl = `https://web.whatsapp.com/send?text=${encodeURIComponent(testMsg)}&disaster_auto_send=1`;
+      waUrl = `https://web.whatsapp.com/send?text=${encodeURIComponent(
+        testMsg
+      )}&disaster_auto_send=1&disaster_target=${encodeURIComponent(safeTarget)}`;
     }
 
     // Open WhatsApp Web in the same browser

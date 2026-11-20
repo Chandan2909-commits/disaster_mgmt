@@ -174,7 +174,59 @@ def send_or_prepare_message():
                 "target": chat_target
             }), 200
 
-        # If not phone-direct, search for the contact in search bar
+        # Check if "Send message to" dialog is present (common when opened with send?text=...)
+        dialog_elements = driver.find_elements(By.XPATH, '//div[@role="dialog"]')
+        if dialog_elements:
+            logger.info("Found 'Send message to' dialog in Selenium. Searching target contact...")
+            try:
+                # 1. Look for contact in the visible dialog list
+                contact_nodes = driver.find_elements(By.XPATH, f'//div[@role="dialog"]//span[@title="{chat_target}"] | //div[@role="dialog"]//*[contains(text(), "{chat_target}")]')
+                if contact_nodes:
+                    contact_nodes[0].click()
+                    logger.info(f"Clicked contact row for '{chat_target}' in dialog.")
+                else:
+                    # 2. Type into dialog search input
+                    modal_inputs = driver.find_elements(By.XPATH, '//div[@role="dialog"]//input')
+                    if modal_inputs:
+                        modal_inputs[0].clear()
+                        modal_inputs[0].send_keys(chat_target)
+                        time.sleep(1.2)
+                        filtered_contacts = driver.find_elements(By.XPATH, f'//div[@role="dialog"]//*[contains(text(), "{chat_target}")]')
+                        if filtered_contacts:
+                            filtered_contacts[0].click()
+                time.sleep(0.8)
+                # 3. Click green send button in dialog
+                dialog_send = driver.find_elements(By.XPATH, '//div[@role="dialog"]//button[@aria-label="Send"] | //div[@role="dialog"]//span[@data-icon="send"]/ancestor::button')
+                if dialog_send:
+                    dialog_send[0].click()
+                    logger.info("Clicked green send button inside 'Send message to' dialog!")
+                    time.sleep(2.0)
+                    last_sent_info = {
+                        "target": chat_target,
+                        "message": test_message,
+                        "sent_at": time.strftime('%H:%M:%S'),
+                        "send_action_performed": True,
+                        "status": "SENT"
+                    }
+                    # Switch back to dashboard
+                    try:
+                        driver.execute_script("window.open('https://disastermgmt-chi.vercel.app/', '_blank');")
+                        time.sleep(0.5)
+                        driver.switch_to.window(driver.window_handles[-1])
+                    except Exception:
+                        pass
+                    return jsonify({
+                        "success": True,
+                        "workflow_stage": "MESSAGE_SENT_SUCCESS",
+                        "message": f"Message transmitted to '{chat_target}' and returned to dashboard.",
+                        "chat_target": chat_target,
+                        "prepared_text": test_message,
+                        "is_sent": True
+                    }), 200
+            except Exception as e:
+                logger.warning(f"Dialog handling error: {e}")
+
+        # If not phone-direct and no modal, search for the contact in main search bar
         if not is_phone:
             try:
                 # Find search box
