@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DisasterMgmt Companion</title>
+  <style>
+    body {
+      width: 280px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f8f9fa;
+      color: #1e1e1e;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .badge {
+      font-size: 10px;
+      background: #10b981;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 800;
+      margin: 0;
+      color: #1e1e1e;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 12px;
+      border: 1px solid #e5e7eb;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .dot.green { background: #10b981; }
+    .dot.amber { background: #f59e0b; }
+    .desc {
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      background: #1e1e1e;
+      color: white;
+      text-align: center;
+      text-decoration: none;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.1s;
+    }
+    .btn:active {
+      transform: scale(0.96);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 class="title">DisasterMgmt</h1>
+    <span class="badge">Active</span>
+  </div>
+  <p class="desc">
+    Research Simulation Companion Extension active on this browser.
+  </p>
+  <div class="card">
+    <div class="status-row">
+      <span style="color:#6b7280;">Extension Bridge</span>
+      <span><span class="dot green"></span> Connected</span>
+    </div>
+    <div class="status-row">
+      <span style="color:#6b7280;">Companion Agent</span>
+      <span id="agent-status"><span class="dot amber"></span> Checking...</span>
+    </div>
+  </div>
+  <button class="btn" id="check-btn">Ping Local Agent</button>
+  <script src="popup.js"></script>
+</body>
+</html>

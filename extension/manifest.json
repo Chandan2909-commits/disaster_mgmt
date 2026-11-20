@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "DisasterMgmt Automation Companion",
+  "version": "1.0.0",
+  "description": "Companion extension for DisasterMgmt flood monitoring and simulation research prototype.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*",
+    "http://localhost/*",
+    "https://*.vercel.app/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "DisasterMgmt Companion"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://*.vercel.app/*",
+        "<all_urls>"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
