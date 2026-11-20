@@ -37,7 +37,7 @@ export async function generateExtensionZip(): Promise<Blob> {
     }
   };
 
-  const contentJs = `// Content script for DisasterMgmt extension
+  const contentJs = `// Content script for DisasterMgmt extension (CSP Safe)
 (function() {
   const isWhatsApp = window.location.hostname === 'web.whatsapp.com';
 
@@ -47,20 +47,12 @@ export async function generateExtensionZip(): Promise<Blob> {
       document.documentElement.setAttribute('data-extension-version', '1.2.0');
     }
 
-    const script = document.createElement('script');
-    script.textContent = \`
-      window.__DISASTER_MGMT_EXTENSION__ = {
-        version: '1.2.0',
-        active: true,
-        companionPort: 8765,
-        loadedAt: Date.now()
-      };
-      window.dispatchEvent(new CustomEvent('disaster-mgmt-extension-ready', {
-        detail: { version: '1.2.0', active: true }
-      }));
-    \`;
-    (document.head || document.documentElement).appendChild(script);
-    script.remove();
+    window.postMessage({
+      source: 'disaster-mgmt-extension',
+      type: 'DISASTER_MGMT_EXTENSION_READY',
+      version: '1.2.0',
+      active: true
+    }, '*');
     return;
   }
 
@@ -72,7 +64,7 @@ export async function generateExtensionZip(): Promise<Blob> {
   if (isAutoSend) {
     console.log('[DisasterMgmt Extension] Auto-send requested. Waiting for compose and send button...');
     let attempts = 0;
-    const maxAttempts = 35;
+    const maxAttempts = 40;
 
     const timer = setInterval(() => {
       attempts++;

@@ -9,16 +9,17 @@ export interface ExtensionStatus {
 
 export const extensionBridge = {
   async detectExtension(): Promise<ExtensionStatus> {
-    // 1. Check window object or DOM dataset injected by Chrome Extension
-    if (typeof window !== 'undefined') {
-      const ext = (window as any).__DISASTER_MGMT_EXTENSION__;
+    // 1. Check DOM dataset injected by Chrome Extension (CSP Safe)
+    if (typeof document !== 'undefined') {
       const domFlag = document.documentElement?.getAttribute('data-disaster-mgmt-extension');
+      const domVer = document.documentElement?.getAttribute('data-extension-version');
+      const extObj = typeof window !== 'undefined' ? (window as any).__DISASTER_MGMT_EXTENSION__ : null;
 
-      if (ext?.active || domFlag === 'active') {
+      if (domFlag === 'active' || extObj?.active) {
         return {
           isInstalled: true,
           hasLocalAgent: true,
-          version: ext?.version || '1.0.0',
+          version: domVer || extObj?.version || '1.2.0',
           source: 'chrome-extension',
         };
       }
