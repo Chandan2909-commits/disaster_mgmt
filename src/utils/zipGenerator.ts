@@ -6,13 +6,14 @@ export async function generateExtensionZip(): Promise<Blob> {
   const manifest = {
     manifest_version: 3,
     name: "DisasterMgmt Automation Companion",
-    version: "1.0.0",
+    version: "1.2.0",
     description: "Companion extension for DisasterMgmt flood monitoring and simulation research prototype.",
-    permissions: ["storage"],
+    permissions: ["storage", "tabs"],
     host_permissions: [
       "http://127.0.0.1:8765/*",
       "http://localhost/*",
-      "https://*.vercel.app/*"
+      "https://*.vercel.app/*",
+      "https://web.whatsapp.com/*"
     ],
     action: {
       default_popup: "popup.html",
@@ -24,6 +25,7 @@ export async function generateExtensionZip(): Promise<Blob> {
           "http://localhost/*",
           "http://127.0.0.1/*",
           "https://*.vercel.app/*",
+          "https://web.whatsapp.com/*",
           "<all_urls>"
         ],
         js: ["content.js"],
@@ -37,30 +39,90 @@ export async function generateExtensionZip(): Promise<Blob> {
 
   const contentJs = `// Content script for DisasterMgmt extension
 (function() {
-  if (document.documentElement) {
-    document.documentElement.setAttribute('data-disaster-mgmt-extension', 'active');
-    document.documentElement.setAttribute('data-extension-version', '1.0.0');
+  const isWhatsApp = window.location.hostname === 'web.whatsapp.com';
+
+  if (!isWhatsApp) {
+    if (document.documentElement) {
+      document.documentElement.setAttribute('data-disaster-mgmt-extension', 'active');
+      document.documentElement.setAttribute('data-extension-version', '1.2.0');
+    }
+
+    const script = document.createElement('script');
+    script.textContent = \`
+      window.__DISASTER_MGMT_EXTENSION__ = {
+        version: '1.2.0',
+        active: true,
+        companionPort: 8765,
+        loadedAt: Date.now()
+      };
+      window.dispatchEvent(new CustomEvent('disaster-mgmt-extension-ready', {
+        detail: { version: '1.2.0', active: true }
+      }));
+    \`;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+    return;
   }
 
-  const script = document.createElement('script');
-  script.textContent = \`
-    window.__DISASTER_MGMT_EXTENSION__ = {
-      version: '1.0.0',
-      active: true,
-      companionPort: 8765,
-      loadedAt: Date.now()
-    };
-    window.dispatchEvent(new CustomEvent('disaster-mgmt-extension-ready', {
-      detail: { version: '1.0.0', active: true }
-    }));
-  \`;
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
+  // --- WHATSAPP WEB AUTOMATION & AUTO-SWITCH ---
+  console.log('[DisasterMgmt Extension] WhatsApp Web detected.');
+  const urlParams = new URLSearchParams(window.location.search);
+  const isAutoSend = urlParams.get('disaster_auto_send') === '1' || window.location.href.includes('disaster_auto_send=1');
+
+  if (isAutoSend) {
+    console.log('[DisasterMgmt Extension] Auto-send requested. Waiting for compose and send button...');
+    let attempts = 0;
+    const maxAttempts = 35;
+
+    const timer = setInterval(() => {
+      attempts++;
+      const sendBtn = document.querySelector('button[aria-label="Send"], span[data-icon="send"]');
+      const composeBox = document.querySelector('footer div[contenteditable="true"], div[contenteditable="true"][data-tab="10"]');
+
+      if (sendBtn) {
+        console.log('[DisasterMgmt Extension] Send button located! Clicking send...');
+        sendBtn.closest('button')?.click();
+        clearInterval(timer);
+
+        setTimeout(() => {
+          console.log('[DisasterMgmt Extension] Switching back to DisasterMgmt Dashboard...');
+          chrome.runtime.sendMessage({ action: 'SWITCH_TO_DASHBOARD' });
+        }, 2200);
+      } else if (composeBox && composeBox.textContent.trim().length > 0) {
+        console.log('[DisasterMgmt Extension] Triggering Enter on compose box...');
+        composeBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        clearInterval(timer);
+
+        setTimeout(() => {
+          chrome.runtime.sendMessage({ action: 'SWITCH_TO_DASHBOARD' });
+        }, 2200);
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(timer);
+      }
+    }, 500);
+  }
 })();
 `;
 
   const backgroundJs = `chrome.runtime.onInstalled.addListener(() => {
   console.log('[DisasterMgmt Extension] Installed successfully.');
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'SWITCH_TO_DASHBOARD') {
+    chrome.tabs.query({}, (tabs) => {
+      const dashTab = tabs.find(
+        (t) => t.url && (t.url.includes('disastermgmt') || t.url.includes('localhost:3000'))
+      );
+      if (dashTab && dashTab.id) {
+        chrome.tabs.update(dashTab.id, { active: true });
+      } else {
+        chrome.tabs.create({ url: 'https://disastermgmt-chi.vercel.app/' });
+      }
+    });
+  }
 });
 `;
 
@@ -77,13 +139,17 @@ export async function generateExtensionZip(): Promise<Blob> {
   </style>
 </head>
 <body>
-  <div class="title">DisasterMgmt <span class="badge">Active</span></div>
-  <p class="desc">The companion extension is running and connected to your active browser session.</p>
+  <div class="title">DisasterMgmt <span class="badge">Active v1.2</span></div>
+  <p class="desc">The companion extension is running. Automatically transmits WhatsApp messages and returns tab to the dashboard.</p>
 </body>
 </html>
 `;
 
-  const readme = `# DisasterMgmt Chrome Extension
+  const readme = `# DisasterMgmt Chrome Extension v1.2
+
+## Features:
+- Auto-detects in the dashboard on load without disruptive popups.
+- Opens WhatsApp Web directly in your active browser, automatically transmits the message, and returns focus to the DisasterMgmt dashboard tab!
 
 ## Quick Installation Instructions:
 1. Extract this zip file into any folder on your computer.

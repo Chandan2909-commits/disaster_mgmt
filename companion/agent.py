@@ -248,6 +248,15 @@ def send_or_prepare_message():
                 "status": "SENT"
             }
 
+            # Once the message is sent, switch the tab back to the dashboard so the user returns to the UI
+            try:
+                logger.info("Message sent! Switching tab to https://disastermgmt-chi.vercel.app/ in the same opened browser...")
+                driver.execute_script("window.open('https://disastermgmt-chi.vercel.app/', '_blank');")
+                time.sleep(0.6)
+                driver.switch_to.window(driver.window_handles[-1])
+            except Exception as e:
+                logger.warning(f"Could not switch tab to dashboard: {e}")
+
             return jsonify({
                 "success": True,
                 "workflow_stage": "MESSAGE_SENT_SUCCESS",

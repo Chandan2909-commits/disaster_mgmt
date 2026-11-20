@@ -1,64 +1,76 @@
 // Content script for DisasterMgmt extension
 (function() {
-  // 1. Mark presence in DOM dataset immediately
-  if (document.documentElement) {
-    document.documentElement.setAttribute('data-disaster-mgmt-extension', 'active');
-    document.documentElement.setAttribute('data-extension-version', '1.0.0');
+  const isWhatsApp = window.location.hostname === 'web.whatsapp.com';
+
+  if (!isWhatsApp) {
+    // 1. Mark presence in DOM dataset on Dashboard pages
+    if (document.documentElement) {
+      document.documentElement.setAttribute('data-disaster-mgmt-extension', 'active');
+      document.documentElement.setAttribute('data-extension-version', '1.2.0');
+    }
+
+    // 2. Inject bridge script into the page window context
+    const script = document.createElement('script');
+    script.textContent = `
+      window.__DISASTER_MGMT_EXTENSION__ = {
+        version: '1.2.0',
+        active: true,
+        companionPort: 8765,
+        loadedAt: Date.now()
+      };
+      window.dispatchEvent(new CustomEvent('disaster-mgmt-extension-ready', {
+        detail: { version: '1.2.0', active: true }
+      }));
+    `;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+    return;
   }
 
-  // 2. Inject bridge script into the page window context
-  const script = document.createElement('script');
-  script.textContent = `
-    window.__DISASTER_MGMT_EXTENSION__ = {
-      version: '1.0.0',
-      active: true,
-      companionPort: 8765,
-      loadedAt: Date.now()
-    };
-    window.dispatchEvent(new CustomEvent('disaster-mgmt-extension-ready', {
-      detail: { version: '1.0.0', active: true }
-    }));
-  `;
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
+  // --- WHATSAPP WEB AUTOMATION & AUTO-SWITCH ---
+  console.log('[DisasterMgmt Extension] WhatsApp Web detected.');
 
-  // 3. Listen for requests from page
-  window.addEventListener('message', async (event) => {
-    if (!event.data || event.data.source !== 'disaster-mgmt-web') return;
+  const urlParams = new URLSearchParams(window.location.search);
+  const isAutoSend = urlParams.get('disaster_auto_send') === '1' || window.location.href.includes('disaster_auto_send=1');
 
-    if (event.data.type === 'PING_EXTENSION') {
-      window.postMessage({
-        source: 'disaster-mgmt-extension',
-        type: 'PONG_EXTENSION',
-        version: '1.0.0',
-        active: true
-      }, '*');
-    }
+  if (isAutoSend) {
+    console.log('[DisasterMgmt Extension] Auto-send requested. Waiting for WhatsApp compose and send button...');
 
-    if (event.data.type === 'RELAY_TO_COMPANION') {
-      try {
-        const res = await fetch('http://127.0.0.1:8765' + event.data.endpoint, {
-          method: event.data.method || 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          body: event.data.payload ? JSON.stringify(event.data.payload) : undefined
-        });
-        const json = await res.json();
-        window.postMessage({
-          source: 'disaster-mgmt-extension',
-          type: 'COMPANION_RESPONSE',
-          requestId: event.data.requestId,
-          success: true,
-          data: json
-        }, '*');
-      } catch (err) {
-        window.postMessage({
-          source: 'disaster-mgmt-extension',
-          type: 'COMPANION_RESPONSE',
-          requestId: event.data.requestId,
-          success: false,
-          error: err.toString()
-        }, '*');
+    let attempts = 0;
+    const maxAttempts = 35; // ~17.5 seconds
+
+    const timer = setInterval(() => {
+      attempts++;
+
+      // Look for send button or compose box
+      const sendBtn = document.querySelector('button[aria-label="Send"], span[data-icon="send"]');
+      const composeBox = document.querySelector('footer div[contenteditable="true"], div[contenteditable="true"][data-tab="10"]');
+
+      if (sendBtn) {
+        console.log('[DisasterMgmt Extension] Send button located! Clicking send...');
+        sendBtn.closest('button')?.click();
+        clearInterval(timer);
+
+        // Wait 2.5 seconds to confirm transmission, then switch back to dashboard
+        setTimeout(() => {
+          console.log('[DisasterMgmt Extension] Switching back to DisasterMgmt Dashboard...');
+          chrome.runtime.sendMessage({ action: 'SWITCH_TO_DASHBOARD' });
+        }, 2200);
+      } else if (composeBox && composeBox.textContent.trim().length > 0) {
+        // Press Enter
+        console.log('[DisasterMgmt Extension] Triggering Enter key on compose box...');
+        composeBox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        clearInterval(timer);
+
+        setTimeout(() => {
+          chrome.runtime.sendMessage({ action: 'SWITCH_TO_DASHBOARD' });
+        }, 2200);
       }
-    }
-  });
+
+      if (attempts >= maxAttempts) {
+        clearInterval(timer);
+        console.log('[DisasterMgmt Extension] Auto-send attempt window finished.');
+      }
+    }, 500);
+  }
 })();

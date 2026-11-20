@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   AlertCircle,
   QrCode,
+  Share2,
 } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
 
@@ -25,6 +26,7 @@ export const NotificationConsole: React.FC = () => {
     triggerManualDispatch,
     checkDeliveryStatus,
     extensionStatus,
+    telemetry,
   } = useSimulation();
 
   const [isSending, setIsSending] = useState(false);
@@ -34,6 +36,33 @@ export const NotificationConsole: React.FC = () => {
   const handleTargetChange = (val: string) => {
     setTargetInput(val);
     setCustomChatTarget(val);
+  };
+
+  // Direct open in the same browser window
+  const handleOpenInSameBrowser = () => {
+    const rawTarget = targetInput.trim();
+    const isPhone = /^\+?[0-9]{7,15}$/.test(rawTarget.replace(/\s+/g, '').replace(/-/g, ''));
+    const cleanPhone = isPhone ? rawTarget.replace(/[^0-9]/g, '') : '';
+
+    const testMsg = `[SIMULATION ALERT] Flood monitoring demo: simulated river level is ${telemetry.waterLevel.toFixed(
+      2
+    )} m; threat status is ${telemetry.threatStatus}; threat score is ${telemetry.floodThreatScore.toFixed(
+      1
+    )}; trend is ${telemetry.rateOfChange >= 0 ? '+' : ''}${telemetry.rateOfChange.toFixed(
+      2
+    )} m/h. Target: ${rawTarget}.`;
+
+    let waUrl = '';
+    if (isPhone && cleanPhone.length >= 7) {
+      waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(
+        testMsg
+      )}&disaster_auto_send=1`;
+    } else {
+      waUrl = `https://web.whatsapp.com/send?text=${encodeURIComponent(testMsg)}&disaster_auto_send=1`;
+    }
+
+    // Open WhatsApp Web in the same browser
+    window.open(waUrl, '_blank');
   };
 
   const handleSendNow = async () => {
@@ -75,11 +104,16 @@ export const NotificationConsole: React.FC = () => {
         );
       case 'SENT':
       case 'SENT_SINGLE_TICK':
-      case 'MOCK_SENT':
         return (
           <span className="flex items-center gap-1.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
             <Check className="w-3.5 h-3.5 text-emerald-600" />
             <span>Sent to Server (Single Tick)</span>
+          </span>
+        );
+      case 'MOCK_SENT':
+        return (
+          <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+            <span>Mock Simulation (Local Agent Offline)</span>
           </span>
         );
       case 'PENDING_CLOCK':
@@ -131,7 +165,7 @@ export const NotificationConsole: React.FC = () => {
                 WhatsApp Dispatch & Verification
               </h3>
               <span className="text-[11px] font-semibold text-gray-400">
-                Selenium Companion Harness (Port 8765)
+                Live Browser & Selenium Integration
               </span>
             </div>
           </div>
@@ -142,7 +176,7 @@ export const NotificationConsole: React.FC = () => {
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                 : notificationWorkflow.stage === 'IDLE'
                 ? 'bg-gray-100 text-gray-500'
-                : 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
+                : 'bg-amber-50 text-amber-700 border border-amber-200'
             }`}
           >
             {notificationWorkflow.stage.replace(/_/g, ' ')}
@@ -162,7 +196,7 @@ export const NotificationConsole: React.FC = () => {
                 type="text"
                 value={targetInput}
                 onChange={(e) => handleTargetChange(e.target.value)}
-                placeholder="e.g. +919876543210 or Contact Name"
+                placeholder="e.g. +919876543210 or disaster_mgmt_research_paper"
                 className="w-full pl-9 pr-3 py-2 bg-[#f4f5f7] rounded-xl text-xs font-semibold text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all border border-transparent"
               />
             </div>
@@ -235,10 +269,10 @@ export const NotificationConsole: React.FC = () => {
         </div>
 
         {/* Stage Timeline */}
-        <div className="mt-3 space-y-1.5 max-h-28 overflow-y-auto scrollable-content">
+        <div className="mt-3 space-y-1.5 max-h-24 overflow-y-auto scrollable-content">
           {notificationWorkflow.progressLog.length === 0 ? (
             <p className="text-[11px] text-gray-400 italic">
-              Ready to transmit. Click "Send via WhatsApp Selenium" below or wait for 30s alert timeout.
+              Ready to transmit. Click "Open WhatsApp in Browser Tab" or "Send via Selenium" below.
             </p>
           ) : (
             notificationWorkflow.progressLog.map((log, idx) => (
@@ -256,30 +290,29 @@ export const NotificationConsole: React.FC = () => {
         </div>
       </div>
 
-      {/* Action Footer */}
-      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
-        <div className="text-[11px] text-gray-500 font-medium">
-          {extensionStatus.isInstalled ? (
-            <span className="text-emerald-600 font-bold flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Local Agent Ready (127.0.0.1:8765)
-            </span>
-          ) : (
-            <span className="text-gray-400">Run python companion/agent.py to enable Selenium</span>
-          )}
-        </div>
+      {/* Action Footer: Both in-browser direct and selenium agent options */}
+      <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
+        <button
+          onClick={handleOpenInSameBrowser}
+          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap"
+          title="Opens WhatsApp Web directly in a tab in this browser with auto-send"
+        >
+          <ExternalLink className="w-4 h-4" />
+          <span>Open WhatsApp & Auto-Send in this Browser</span>
+        </button>
 
         <button
           onClick={handleSendNow}
           disabled={isSending}
-          className="bg-[#1e1e1e] text-white font-bold px-5 py-2.5 rounded-2xl text-xs shadow-md transition-transform active:scale-95 flex items-center gap-2 disabled:opacity-50"
+          className="bg-[#1e1e1e] text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 whitespace-nowrap"
+          title="Sends message using the local Python Selenium companion on port 8765"
         >
           {isSending ? (
             <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
           ) : (
             <Send className="w-3.5 h-3.5 text-emerald-400" />
           )}
-          <span>{isSending ? 'Sending via WhatsApp...' : 'Send via WhatsApp Selenium'}</span>
+          <span>{isSending ? 'Sending...' : 'Send via Selenium Agent'}</span>
         </button>
       </div>
     </div>
