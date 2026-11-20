@@ -5,7 +5,7 @@ import {
   AlertState,
   NotificationWorkflowState,
   ScenarioPreset,
-  GraphControlPoint,
+  DeliveryInfo,
 } from '../types';
 import {
   getInitialTelemetry,
@@ -32,6 +32,8 @@ interface SimulationContextType {
   showSettingsModal: boolean;
   showLogModal: boolean;
   customChatTarget: string;
+  sendLiveMessages: boolean;
+  setSendLiveMessages: (enabled: boolean) => void;
   setCustomChatTarget: (target: string) => void;
   setIsRunning: (running: boolean) => void;
   setShowExtensionModal: (show: boolean) => void;
@@ -47,6 +49,8 @@ interface SimulationContextType {
   updateThresholds: (warning: number, danger: number, alpha: number, beta: number, gamma: number) => void;
   checkExtensionAgain: () => Promise<void>;
   dismissExtensionModal: () => void;
+  triggerManualDispatch: (target?: string, liveSend?: boolean) => Promise<void>;
+  checkDeliveryStatus: () => Promise<DeliveryInfo | null>;
 }
 
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined);
@@ -59,6 +63,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [alertState, setAlertState] = useState<AlertState | null>(null);
   const [eventLog, setEventLog] = useState<SimulationEvent[]>([]);
   const [customChatTarget, setCustomChatTarget] = useState<string>('disaster_mgmt_research_paper');
+  const [sendLiveMessages, setSendLiveMessages] = useState<boolean>(true);
 
   // Extension status & modal
   const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus>({
@@ -67,7 +72,6 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     source: 'none',
   });
   const [showExtensionModal, setShowExtensionModal] = useState<boolean>(false);
-  const [extensionChecked, setExtensionChecked] = useState<boolean>(false);
 
   // UI Modals
   const [showGraphModal, setShowGraphModal] = useState<boolean>(false);
@@ -82,6 +86,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     targetChat: 'disaster_mgmt_research_paper',
     testMessage: '',
     isLocalAgentUsed: false,
+    sendActionEnabled: true,
     progressLog: [],
   });
 
@@ -106,34 +111,27 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setEventLog((prev) => [newEvent, ...prev.slice(0, 99)]);
   }, []);
 
-  // Check extension on mount in the backend/background
+  // Check extension silently on mount
   const checkExtensionSilently = useCallback(async () => {
     try {
       const status = await extensionBridge.detectExtension();
       setExtensionStatus(status);
-      setExtensionChecked(true);
 
-      // If NOT installed, show modal unless user has opted out in localStorage
       if (!status.isInstalled) {
         const dismissed = localStorage.getItem('disaster_mgmt_ext_dismissed');
         if (!dismissed) {
           setShowExtensionModal(true);
         }
       } else {
-        // If extension is loaded, DO NOT show modal in the frontend
         setShowExtensionModal(false);
       }
     } catch {
-      setExtensionChecked(true);
       setShowExtensionModal(true);
     }
   }, []);
 
   useEffect(() => {
-    // Initial silent detection
     checkExtensionSilently();
-
-    // Log initialization
     addEvent(
       'SIMULATION_STARTED',
       'Hydrological Simulation Harness Active',
@@ -148,7 +146,6 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const interval = setInterval(() => {
       setTelemetry((prev) => {
-        // Bounded slight natural fluctuations
         const noise = (Math.random() - 0.5) * 0.02;
         const newLevel = Math.max(0.5, Math.min(10.0, prev.waterLevel + (prev.rateOfChange / 3600) * 1.5 + noise));
         const newRainfall = Math.max(0, prev.rainfallRate + (Math.random() - 0.5) * 0.5);
@@ -209,7 +206,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         score: telemetry.floodThreatScore,
       };
       const updated = [...prev, entry];
-      return updated.slice(-25); // keep last 25 readings
+      return updated.slice(-25);
     });
   }, [telemetry.lastUpdated, telemetry.waterLevel, telemetry.rateOfChange, telemetry.floodThreatScore]);
 
@@ -218,7 +215,6 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const currentStatus = telemetry.threatStatus;
     const isDangerous = currentStatus === 'WARNING' || currentStatus === 'CRITICAL';
 
-    // If crossing into WARNING or CRITICAL and no alert currently active
     if (isDangerous && !alertState?.active && lastAlertStatusRef.current !== currentStatus) {
       const incidentId = 'INC-' + Math.floor(1000 + Math.random() * 9000);
       setAlertState({
@@ -253,7 +249,6 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (!prev || !prev.active || prev.decision) return prev;
 
         if (prev.countdownRemaining <= 1) {
-          // Timeout reached!
           clearInterval(timer);
           triggerTimeoutWorkflow(prev);
           return {
@@ -273,40 +268,31 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => clearInterval(timer);
   }, [alertState?.active, alertState?.decision]);
 
-  // Trigger Mock Notification Workflow on Human Review Timeout
-  const triggerTimeoutWorkflow = useCallback(async (alert: AlertState) => {
-    addEvent(
-      'HUMAN_REVIEW_TIMEOUT',
-      'Operator Review Window Expired (30s Timeout)',
-      'No human cancellation input received within 30s. Triggering mock notification pipeline.',
-      'warning',
-      { incidentId: alert.incidentId }
-    );
-
-    const testMsg = `[SIMULATION — NOT SENT] Flood monitoring demo: simulated river level is ${telemetry.waterLevel.toFixed(
+  // Trigger dispatch (shared between 30s timeout and manual send button)
+  const executeDispatch = useCallback(async (target: string, shouldSend: boolean, customText?: string) => {
+    const testMsg = customText || `[SIMULATION ALERT] Flood monitoring demo: simulated river level is ${telemetry.waterLevel.toFixed(
       2
     )} m; threat status is ${telemetry.threatStatus}; threat score is ${telemetry.floodThreatScore.toFixed(
       1
     )}; trend is ${telemetry.rateOfChange >= 0 ? '+' : ''}${telemetry.rateOfChange.toFixed(
       2
-    )} m/h. This is a research prototype and not a real emergency warning.`;
+    )} m/h. Target: ${target}.`;
 
     setNotificationWorkflow({
       stage: 'QUEUED',
       active: true,
-      targetChat: customChatTarget,
+      targetChat: target,
       testMessage: testMsg,
       isLocalAgentUsed: false,
+      sendActionEnabled: shouldSend,
       progressLog: [
-        { time: new Date().toLocaleTimeString(), stage: 'QUEUED', note: 'Simulation dispatch request queued' },
+        { time: new Date().toLocaleTimeString(), stage: 'QUEUED', note: `Dispatch queued for '${target}' (SendAction=${shouldSend})` },
       ],
     });
 
-    // Check if local Selenium companion is alive
     const agentHealth = await localAgentService.checkHealth();
 
     if (agentHealth && agentHealth.status === 'online') {
-      // Local agent connected
       setNotificationWorkflow((prev) => ({
         ...prev,
         stage: 'LOCAL_AGENT_CONNECTED',
@@ -317,15 +303,13 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ],
       }));
 
-      addEvent('LOCAL_AGENT_CONNECTED', 'Local Companion Agent Connected', 'Restricted loopback bridge active (127.0.0.1:8765).', 'info');
-
-      // Call prepare message
+      // Opening browser
       setNotificationWorkflow((prev) => ({
         ...prev,
         stage: 'BROWSER_OPENED',
         progressLog: [
           ...prev.progressLog,
-          { time: new Date().toLocaleTimeString(), stage: 'BROWSER_OPENED', note: 'Browser opened. Navigating to WhatsApp Web...' },
+          { time: new Date().toLocaleTimeString(), stage: 'BROWSER_OPENED', note: `Navigating to WhatsApp Web (Target: ${target})...` },
         ],
       }));
 
@@ -334,42 +318,74 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         status: telemetry.threatStatus,
         score: telemetry.floodThreatScore,
         trend: `${telemetry.rateOfChange >= 0 ? '+' : ''}${telemetry.rateOfChange.toFixed(2)} m/h`,
-        chat_target: customChatTarget,
+        chat_target: target,
+        send_action: shouldSend,
+        message: testMsg,
       });
 
-      if (res.success && res.workflow_stage === 'TEST_MESSAGE_PREPARED') {
-        setNotificationWorkflow((prev) => ({
-          ...prev,
-          stage: 'NOT_SENT_SIMULATION_COMPLETE',
-          progressLog: [
-            ...prev.progressLog,
-            { time: new Date().toLocaleTimeString(), stage: 'CHAT_LOCATED', note: `Located test chat [${customChatTarget}]` },
-            { time: new Date().toLocaleTimeString(), stage: 'TEST_MESSAGE_PREPARED', note: 'Message drafted into compose box' },
-            { time: new Date().toLocaleTimeString(), stage: 'NOT_SENT_SIMULATION_COMPLETE', note: 'Execution halted. SEND action strictly blocked by research safety policy.' },
-          ],
-        }));
-        addEvent('TEST_MESSAGE_PREPARED', 'Test Message Drafted (Selenium)', 'Browser automation drafted test message. Send button omitted.', 'success');
-        addEvent('SIMULATION_MESSAGE_NOT_SENT', 'Safety Guardrail Enforced', 'No message sent or transmitted. Research demonstration complete.', 'info');
+      if (res.success) {
+        if (res.is_sent) {
+          setNotificationWorkflow((prev) => ({
+            ...prev,
+            stage: 'MESSAGE_SENT_SUCCESS',
+            deliveryInfo: {
+              isSent: true,
+              status: 'SENT',
+              label: 'Message Transmitted to WhatsApp Server',
+              lastTarget: target,
+              checkedAt: new Date().toLocaleTimeString(),
+              preview: testMsg,
+            },
+            progressLog: [
+              ...prev.progressLog,
+              { time: new Date().toLocaleTimeString(), stage: 'CHAT_LOCATED', note: `Located chat '${target}'` },
+              { time: new Date().toLocaleTimeString(), stage: 'MESSAGE_SENT_SUCCESS', note: `Message transmitted via WhatsApp Web to '${target}'!` },
+            ],
+          }));
+          addEvent('TEST_MESSAGE_PREPARED', 'WhatsApp Message Transmitted', `Message successfully sent to '${target}' via Selenium.`, 'success');
+        } else {
+          setNotificationWorkflow((prev) => ({
+            ...prev,
+            stage: 'TEST_MESSAGE_PREPARED',
+            deliveryInfo: {
+              isSent: false,
+              status: 'DRAFT_IN_COMPOSE',
+              label: 'Draft Prepared in Compose Box',
+              lastTarget: target,
+              checkedAt: new Date().toLocaleTimeString(),
+              preview: testMsg,
+            },
+            progressLog: [
+              ...prev.progressLog,
+              { time: new Date().toLocaleTimeString(), stage: 'CHAT_LOCATED', note: `Located chat '${target}'` },
+              { time: new Date().toLocaleTimeString(), stage: 'TEST_MESSAGE_PREPARED', note: 'Draft typed into WhatsApp compose box. (Send toggle was disabled)' },
+            ],
+          }));
+        }
       } else {
-        // Fallback info
         setNotificationWorkflow((prev) => ({
           ...prev,
-          stage: 'NOT_SENT_SIMULATION_COMPLETE',
+          stage: 'FAILED_FALLBACK_MOCK',
+          deliveryInfo: {
+            isSent: false,
+            status: 'CHECK_ERROR',
+            label: res.message || 'WhatsApp Web login or navigation required',
+            lastTarget: target,
+            checkedAt: new Date().toLocaleTimeString(),
+          },
           progressLog: [
             ...prev.progressLog,
-            { time: new Date().toLocaleTimeString(), stage: 'MOCK_FALLBACK', note: res.message || 'WhatsApp login pending. Completed in mock preview.' },
-            { time: new Date().toLocaleTimeString(), stage: 'NOT_SENT_SIMULATION_COMPLETE', note: 'Mock notification completed. Safety guardrails preserved.' },
+            { time: new Date().toLocaleTimeString(), stage: 'COMPANION_NOTICE', note: res.message || 'Action pending login or contact verification.' },
           ],
         }));
       }
     } else {
-      // In-browser mock workflow progression with realistic step intervals
+      // In-browser mock workflow
       const steps = [
         { stage: 'LOCAL_AGENT_CONNECTED' as const, note: 'Mock mode active (companion offline). Simulating dispatcher...' },
         { stage: 'BROWSER_OPENED' as const, note: 'Opening simulated sandboxed browser tab...' },
-        { stage: 'CHAT_LOCATED' as const, note: `Target chat [${customChatTarget}] located in research registry.` },
-        { stage: 'TEST_MESSAGE_PREPARED' as const, note: 'Test message drafted into mock message buffer.' },
-        { stage: 'NOT_SENT_SIMULATION_COMPLETE' as const, note: 'Simulation complete. Message NOT sent per paper safety protocol.' },
+        { stage: 'CHAT_LOCATED' as const, note: `Target chat [${target}] located in registry.` },
+        { stage: shouldSend ? 'MESSAGE_SENT_SUCCESS' as const : 'TEST_MESSAGE_PREPARED' as const, note: shouldSend ? `[MOCK] Message delivered to ${target} (Mock Mode).` : '[MOCK] Message drafted in mock buffer.' },
       ];
 
       let currentStep = 0;
@@ -379,6 +395,13 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setNotificationWorkflow((prev) => ({
             ...prev,
             stage: s.stage,
+            deliveryInfo: {
+              isSent: shouldSend,
+              status: shouldSend ? 'MOCK_SENT' : 'DRAFT_IN_COMPOSE',
+              label: shouldSend ? 'Simulated Delivery (Mock Mode)' : 'Drafted in Mock Buffer',
+              lastTarget: target,
+              checkedAt: new Date().toLocaleTimeString(),
+            },
             progressLog: [
               ...prev.progressLog,
               { time: new Date().toLocaleTimeString(), stage: s.stage, note: s.note },
@@ -387,17 +410,73 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           currentStep++;
         } else {
           clearInterval(stepInterval);
-          addEvent('TEST_MESSAGE_PREPARED', 'Mock Notification Prepared', 'In-browser simulation completed. Message drafted but not sent.', 'success');
-          addEvent('SIMULATION_MESSAGE_NOT_SENT', 'Safety Guardrail Enforced', 'Emergency transmission strictly blocked in simulation.', 'info');
+          addEvent('TEST_MESSAGE_PREPARED', 'Mock Notification Finished', `Dispatched to ${target} in mock simulation mode.`, 'success');
         }
-      }, 700);
+      }, 600);
     }
-  }, [telemetry, customChatTarget, addEvent]);
+  }, [telemetry, addEvent]);
+
+  // Trigger on timeout
+  const triggerTimeoutWorkflow = useCallback(async (alert: AlertState) => {
+    addEvent(
+      'HUMAN_REVIEW_TIMEOUT',
+      'Operator Review Window Expired (30s Timeout)',
+      'No human cancellation input received within 30s. Triggering notification pipeline.',
+      'warning',
+      { incidentId: alert.incidentId }
+    );
+    await executeDispatch(customChatTarget, sendLiveMessages);
+  }, [customChatTarget, sendLiveMessages, executeDispatch, addEvent]);
+
+  // Manual trigger button
+  const triggerManualDispatch = useCallback(async (target?: string, liveSend?: boolean) => {
+    const chatTarget = target || customChatTarget;
+    const send = liveSend !== undefined ? liveSend : sendLiveMessages;
+    await executeDispatch(chatTarget, send);
+  }, [customChatTarget, sendLiveMessages, executeDispatch]);
+
+  // Check delivery status
+  const checkDeliveryStatus = useCallback(async (): Promise<DeliveryInfo | null> => {
+    const res = await localAgentService.checkDeliveryStatus();
+    if (!res) {
+      const fallback: DeliveryInfo = {
+        isSent: false,
+        status: 'DISCONNECTED',
+        label: 'Local Companion Agent is offline (Run python companion/agent.py)',
+        checkedAt: new Date().toLocaleTimeString(),
+      };
+      setNotificationWorkflow((prev) => ({ ...prev, deliveryInfo: fallback }));
+      return fallback;
+    }
+
+    const info: DeliveryInfo = {
+      isSent: res.is_sent,
+      status: res.delivery_status as any,
+      label: res.status_label,
+      checkedAt: res.sent_at || new Date().toLocaleTimeString(),
+      lastTarget: res.last_target,
+      preview: res.last_message_preview,
+    };
+
+    setNotificationWorkflow((prev) => ({
+      ...prev,
+      deliveryInfo: info,
+      progressLog: [
+        ...prev.progressLog,
+        {
+          time: new Date().toLocaleTimeString(),
+          stage: 'STATUS_CHECKED',
+          note: `Delivery verification: ${res.status_label}`,
+        },
+      ],
+    }));
+
+    return info;
+  }, []);
 
   // Operator cancels alert
   const cancelAlert = useCallback((reason?: string) => {
     if (!alertState || !alertState.active) return;
-
     setAlertState((prev) => (prev ? { ...prev, decision: 'CANCELLED', cancellationReason: reason } : null));
 
     addEvent(
@@ -408,13 +487,11 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       { incidentId: alertState.incidentId, reason }
     );
 
-    // Close alert modal after 1.5s
     setTimeout(() => {
       setAlertState(null);
     }, 1500);
   }, [alertState, addEvent]);
 
-  // Operator dismisses alert modal directly
   const dismissAlert = useCallback(() => {
     setAlertState(null);
   }, []);
@@ -422,11 +499,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Apply scenario preset
   const applyPreset = useCallback((preset: ScenarioPreset) => {
     setActivePreset(preset);
-    setTelemetry((prev) => {
-      const updated = applyScenarioPreset(preset, prev);
-      return updated;
-    });
-
+    setTelemetry((prev) => applyScenarioPreset(preset, prev));
     addEvent(
       'TELEMETRY_UPDATED',
       `Scenario Preset Applied: ${preset.toUpperCase().replace('_', ' ')}`,
@@ -478,13 +551,12 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     addEvent(
       'WATER_LEVEL_PROFILE_SET',
       'Water Level Curve Applied',
-      `Operator committed new simulated profile: Water Level = ${newLevel.toFixed(2)}m, Calculated Rise Rate = ${newRate >= 0 ? '+' : ''}${newRate.toFixed(2)} m/h.`,
+      `Operator committed new simulated profile: Water Level = ${newLevel.toFixed(2)}m, Rate = ${newRate >= 0 ? '+' : ''}${newRate.toFixed(2)} m/h.`,
       'info',
       { newLevel, newRate }
     );
   }, [addEvent]);
 
-  // Reset simulation
   const resetSimulation = useCallback(() => {
     setAlertState(null);
     setNotificationWorkflow({
@@ -493,6 +565,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       targetChat: customChatTarget,
       testMessage: '',
       isLocalAgentUsed: false,
+      sendActionEnabled: sendLiveMessages,
       progressLog: [],
     });
     setTelemetry(getInitialTelemetry());
@@ -505,9 +578,8 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       'All active alerts, countdown timers, and telemetry reset to initial nominal state.',
       'info'
     );
-  }, [customChatTarget, addEvent]);
+  }, [customChatTarget, sendLiveMessages, addEvent]);
 
-  // Update thresholds & weights
   const updateThresholds = useCallback((
     warning: number,
     danger: number,
@@ -583,6 +655,8 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         showSettingsModal,
         showLogModal,
         customChatTarget,
+        sendLiveMessages,
+        setSendLiveMessages,
         setCustomChatTarget,
         setIsRunning,
         setShowExtensionModal,
@@ -598,6 +672,8 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updateThresholds,
         checkExtensionAgain,
         dismissExtensionModal,
+        triggerManualDispatch,
+        checkDeliveryStatus,
       }}
     >
       {children}

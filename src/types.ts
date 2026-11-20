@@ -74,8 +74,18 @@ export type NotificationStage =
   | 'BROWSER_OPENED'
   | 'CHAT_LOCATED'
   | 'TEST_MESSAGE_PREPARED'
+  | 'MESSAGE_SENT_SUCCESS'
   | 'NOT_SENT_SIMULATION_COMPLETE'
   | 'FAILED_FALLBACK_MOCK';
+
+export interface DeliveryInfo {
+  isSent: boolean;
+  status: 'DELIVERED' | 'SENT' | 'SENT_SINGLE_TICK' | 'PENDING_CLOCK' | 'WAITING_FOR_QR' | 'DRAFT_IN_COMPOSE' | 'NO_OUTGOING_MESSAGE' | 'DISCONNECTED' | 'CHECK_ERROR' | 'MOCK_SENT';
+  label: string;
+  checkedAt?: string;
+  lastTarget?: string;
+  preview?: string;
+}
 
 export interface NotificationWorkflowState {
   stage: NotificationStage;
@@ -83,6 +93,8 @@ export interface NotificationWorkflowState {
   targetChat: string;
   testMessage: string;
   isLocalAgentUsed: boolean;
+  sendActionEnabled: boolean;
+  deliveryInfo?: DeliveryInfo;
   progressLog: { time: string; stage: string; note: string }[];
 }
 
