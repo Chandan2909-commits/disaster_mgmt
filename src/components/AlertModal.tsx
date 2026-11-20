@@ -1,21 +1,29 @@
 import React, { useState } from 'react';
-import { AlertCircle, ShieldAlert, XCircle, Clock, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, ShieldAlert, XCircle, Clock, CheckCircle2, X } from 'lucide-react';
 import { useSimulation } from '../context/SimulationContext';
 
 export const AlertModal: React.FC = () => {
-  const { alertState, cancelAlert } = useSimulation();
+  const { alertState, cancelAlert, dismissAlert } = useSimulation();
   const [cancellationReason, setCancellationReason] = useState<string>('');
 
   if (!alertState || !alertState.active) return null;
 
   const isCritical = alertState.status === 'CRITICAL';
   const progressPercent = (alertState.countdownRemaining / 30) * 100;
+  const isTimedOut = alertState.decision === 'TIMED_OUT';
+  const isCancelled = alertState.decision === 'CANCELLED';
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 shadow-2xl max-w-lg w-full animate-slide-up border border-gray-100">
-        {/* Banner */}
-        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+    <div
+      onClick={dismissAlert}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-[32px] p-6 shadow-2xl max-w-lg w-full animate-slide-up border border-gray-100 relative"
+      >
+        {/* Banner with Close X Button */}
+        <div className="flex items-start justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
             <div
               className={`p-2.5 rounded-2xl ${
@@ -38,6 +46,15 @@ export const AlertModal: React.FC = () => {
               </h2>
             </div>
           </div>
+
+          {/* Top-Right Close X Button */}
+          <button
+            onClick={dismissAlert}
+            className="p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* 30-Second Countdown Meter */}
@@ -96,43 +113,69 @@ export const AlertModal: React.FC = () => {
         </div>
 
         {/* Operator Cancellation Input */}
-        <div className="mt-4">
-          <label className="block text-xs font-bold text-gray-700 mb-1.5">
-            Operator Cancellation Note (Optional):
-          </label>
-          <input
-            type="text"
-            value={cancellationReason}
-            onChange={(e) => setCancellationReason(e.target.value)}
-            placeholder="e.g. Scheduled sensor calibration drill / False positive"
-            className="w-full bg-[#f4f5f7] border-transparent rounded-2xl px-4 py-3 font-semibold text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] transition-all"
-          />
-        </div>
+        {!isTimedOut && !isCancelled && (
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+              Operator Cancellation Note (Optional):
+            </label>
+            <input
+              type="text"
+              value={cancellationReason}
+              onChange={(e) => setCancellationReason(e.target.value)}
+              placeholder="e.g. Scheduled sensor calibration drill / False positive"
+              className="w-full bg-[#f4f5f7] border-transparent rounded-2xl px-4 py-3 font-semibold text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] transition-all"
+            />
+          </div>
+        )}
 
         {/* Decision status if already decided */}
-        {alertState.decision === 'CANCELLED' && (
+        {isCancelled && (
           <div className="mt-4 p-3 rounded-2xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>Alert Cancelled by Operator. Action aborted.</span>
           </div>
         )}
-        {alertState.decision === 'TIMED_OUT' && (
+        {isTimedOut && (
           <div className="mt-4 p-3 rounded-2xl bg-amber-50 text-amber-800 text-xs font-bold flex items-center gap-2">
             <Clock className="w-4 h-4 text-amber-600" />
             <span>Window timed out (30s). Commencing mock notification workflow.</span>
           </div>
         )}
 
-        {/* Action Button */}
-        <div className="mt-6 flex items-center justify-end gap-3">
-          <button
-            onClick={() => cancelAlert(cancellationReason)}
-            disabled={alertState.decision !== undefined}
-            className="w-full bg-[#1e1e1e] text-white font-bold py-4 rounded-2xl shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <XCircle className="w-4 h-4 text-rose-400" />
-            <span>Cancel Alert (Dismiss Simulation Action)</span>
-          </button>
+        {/* Action Buttons */}
+        <div className="mt-6 flex items-center gap-3">
+          {isTimedOut ? (
+            <button
+              onClick={dismissAlert}
+              className="w-full bg-[#1e1e1e] text-white font-bold py-4 rounded-2xl shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Acknowledge & Close Modal</span>
+            </button>
+          ) : isCancelled ? (
+            <button
+              onClick={dismissAlert}
+              className="w-full bg-[#1e1e1e] text-white font-bold py-4 rounded-2xl shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2"
+            >
+              <span>Close</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={dismissAlert}
+                className="px-5 py-4 rounded-2xl font-bold text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all active:scale-95"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => cancelAlert(cancellationReason)}
+                className="flex-1 bg-[#1e1e1e] text-white font-bold py-4 rounded-2xl shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-4 h-4 text-rose-400" />
+                <span>Cancel Alert (Dismiss Action)</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

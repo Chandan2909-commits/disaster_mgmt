@@ -42,6 +42,7 @@ interface SimulationContextType {
   applyPreset: (preset: ScenarioPreset) => void;
   applyWaterLevelProfile: (newLevel: number, newRate: number) => void;
   cancelAlert: (reason?: string) => void;
+  dismissAlert: () => void;
   resetSimulation: () => void;
   updateThresholds: (warning: number, danger: number, alpha: number, beta: number, gamma: number) => void;
   checkExtensionAgain: () => Promise<void>;
@@ -413,6 +414,11 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, 1500);
   }, [alertState, addEvent]);
 
+  // Operator dismisses alert modal directly
+  const dismissAlert = useCallback(() => {
+    setAlertState(null);
+  }, []);
+
   // Apply scenario preset
   const applyPreset = useCallback((preset: ScenarioPreset) => {
     setActivePreset(preset);
@@ -587,6 +593,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         applyPreset,
         applyWaterLevelProfile,
         cancelAlert,
+        dismissAlert,
         resetSimulation,
         updateThresholds,
         checkExtensionAgain,
