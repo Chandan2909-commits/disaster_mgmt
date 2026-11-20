@@ -81,7 +81,7 @@ export const localAgentService = {
       return {
         success: false,
         workflow_stage: 'LOCAL_AGENT_FAILED',
-        message: err.message || 'Cannot connect to 127.0.0.1:8765',
+        message: 'Python companion (companion/agent.py) is not running on 127.0.0.1:8765. Click the green button to send directly from this browser!',
         prepared_text: '',
       };
     }
@@ -90,7 +90,7 @@ export const localAgentService = {
   async checkDeliveryStatus(): Promise<MessageStatusResponse | null> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
       const res = await fetch(`${LOCAL_AGENT_URL}/simulation/message-status`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
@@ -99,9 +99,21 @@ export const localAgentService = {
       if (res.ok) {
         return (await res.json()) as MessageStatusResponse;
       }
-      return null;
+      return {
+        active: false,
+        browser_connected: false,
+        is_sent: false,
+        delivery_status: 'DISCONNECTED',
+        status_label: 'Python agent is offline on port 8765. Use green button to send directly.',
+      };
     } catch {
-      return null;
+      return {
+        active: false,
+        browser_connected: false,
+        is_sent: false,
+        delivery_status: 'DISCONNECTED',
+        status_label: 'Python agent is offline on port 8765. Use green button to send directly.',
+      };
     }
   },
 

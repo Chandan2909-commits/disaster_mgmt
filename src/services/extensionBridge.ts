@@ -9,7 +9,7 @@ export interface ExtensionStatus {
 
 export const extensionBridge = {
   async detectExtension(): Promise<ExtensionStatus> {
-    // 1. Check DOM dataset injected by Chrome Extension (CSP Safe)
+    // 1. Check DOM dataset injected by Chrome Extension (Instant & CSP Safe, 0 network calls)
     if (typeof document !== 'undefined') {
       const domFlag = document.documentElement?.getAttribute('data-disaster-mgmt-extension');
       const domVer = document.documentElement?.getAttribute('data-extension-version');
@@ -25,15 +25,21 @@ export const extensionBridge = {
       }
     }
 
-    // 2. Check if local Python agent is listening on 127.0.0.1:8765
-    const agentHealth = await localAgentService.checkHealth();
-    if (agentHealth && agentHealth.status === 'online') {
-      return {
-        isInstalled: true,
-        hasLocalAgent: true,
-        version: agentHealth.version,
-        source: 'local-agent',
-      };
+    // 2. Only check localhost agent if explicitly running on localhost to avoid ERR_CONNECTION_REFUSED
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      try {
+        const agentHealth = await localAgentService.checkHealth();
+        if (agentHealth && agentHealth.status === 'online') {
+          return {
+            isInstalled: true,
+            hasLocalAgent: true,
+            version: agentHealth.version,
+            source: 'local-agent',
+          };
+        }
+      } catch {
+        // Silently ignore connection refused
+      }
     }
 
     return {
